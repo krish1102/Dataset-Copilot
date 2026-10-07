@@ -1,0 +1,249 @@
+import os
+from typing import Any, cast
+from reportlab.lib.pagesizes import letter  # type: ignore[import-untyped]
+from reportlab.lib import colors  # type: ignore[import-untyped]
+from reportlab.platypus import SimpleDocTemplate, Flowable, Paragraph, Spacer, Table, TableStyle, PageBreak  # type: ignore[import-untyped]
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle  # type: ignore[import-untyped]
+from reportlab.lib.units import inch  # type: ignore[import-untyped]
+
+def generate_pdf_report(
+    output_path: str,
+    dataset_metadata: dict,
+    health_summary: dict,
+    cleaning_logs: list,
+    bias_summary: dict,
+    model_comparison_list: list,
+    business_insights: str
+) -> str:
+    """Generates a professional PDF report containing the data analysis and modeling summary."""
+    try:
+        doc = SimpleDocTemplate(
+            output_path,
+            pagesize=letter,
+            rightMargin=54, leftMargin=54, topMargin=54, bottomMargin=54
+        )
+        
+        styles = getSampleStyleSheet()
+        
+        # Define Custom Color Palette (Premium Dark Slate & Indigo)
+        primary_color = colors.HexColor("#1A252C")
+        secondary_color = colors.HexColor("#2C3E50")
+        accent_color = colors.HexColor("#2980B9")
+        bg_light = colors.HexColor("#F8F9FA")
+        text_dark = colors.HexColor("#2C3E50")
+        
+        # Modify existing styles to avoid adding duplicates
+        styles['Normal'].textColor = text_dark
+        styles['BodyText'].textColor = text_dark
+        styles['Heading1'].textColor = primary_color
+        styles['Heading1'].fontSize = 20
+        styles['Heading1'].spaceAfter = 12
+        
+        # Add new custom styles with unique names
+        title_style = ParagraphStyle(
+            name='ReportTitle',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=26,
+            textColor=primary_color,
+            spaceAfter=8,
+            alignment=1 # Centered
+        )
+        
+        subtitle_style = ParagraphStyle(
+            name='ReportSubtitle',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=14,
+            textColor=secondary_color,
+            spaceAfter=30,
+            alignment=1 # Centered
+        )
+        
+        h2_style = ParagraphStyle(
+            name='SectionHeading',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=15,
+            textColor=secondary_color,
+            spaceBefore=14,
+            spaceAfter=8,
+            keepWithNext=True
+        )
+        
+        body_style = ParagraphStyle(
+            name='CustomBody',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=10,
+            leading=14,
+            textColor=text_dark,
+            spaceAfter=6
+        )
+        
+        code_style = ParagraphStyle(
+            name='LogText',
+            parent=styles['Normal'],
+            fontName='Courier',
+            fontSize=9,
+            leading=12,
+            textColor=colors.HexColor("#7F8C8D"),
+            spaceAfter=4
+        )
+        
+        story: list[Any] = []
+        
+        # --- TITLE PAGE ---
+        story.append(Spacer(1, 1.5 * inch))
+        story.append(Paragraph("AI Data Science Copilot", title_style))
+        story.append(Paragraph("Automated Dataset Intelligence, Health, & Model Report", subtitle_style))
+        story.append(Spacer(1, 0.5 * inch))
+        
+        # General Info Block
+        info_data = [
+            [Paragraph("<b>Domain:</b>", body_style), Paragraph(dataset_metadata.get("domain", "General"), body_style)],
+            [Paragraph("<b>Dataset Type:</b>", body_style), Paragraph(dataset_metadata.get("dataset_type", "Tabular"), body_style)],
+            [Paragraph("<b>Problem Type:</b>", body_style), Paragraph(dataset_metadata.get("problem_type", "Classification"), body_style)],
+            [Paragraph("<b>Target Column:</b>", body_style), Paragraph(dataset_metadata.get("suggested_target", "None"), body_style)],
+            [Paragraph("<b>Total Rows:</b>", body_style), Paragraph(f"{dataset_metadata.get('num_rows', 0):,}", body_style)],
+            [Paragraph("<b>Total Columns:</b>", body_style), Paragraph(str(dataset_metadata.get('num_cols', 0)), body_style)]
+        ]
+        info_table = Table(info_data, colWidths=[1.5*inch, 3.5*inch])
+        info_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), bg_light),
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('PADDING', (0,0), (-1,-1), 8),
+            ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#BDC3C7")),
+            ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#ECF0F1")),
+        ]))
+        story.append(info_table)
+        story.append(Spacer(1, 1 * inch))
+        story.append(Paragraph("Generated by Antigravity AI Data Science Copilot Engine", subtitle_style))
+        story.append(PageBreak())
+        
+        # --- SECTION 1: HEALTH ASSESSMENT ---
+        story.append(Paragraph("1. Dataset Health Assessment", styles['Heading1']))
+        score = health_summary.get("score", 100)
+        
+        score_color = "#27AE60" if score >= 80 else ("#F39C12" if score >= 50 else "#C0392B")
+        story.append(Paragraph(f"Overall Dataset Health Score: <b><font color='{score_color}'>{score}/100</font></b>", h2_style))
+        
+        story.append(Paragraph("The health score evaluates data quality dimensions including duplicates, outliers, missingness, and collinearity:", body_style))
+        
+        metrics = health_summary.get("metrics", {})
+        health_data = [
+            ["Metric", "Value"],
+            ["Missing Cells Percentage", f"{metrics.get('missing_pct', 0.0):.1f}%"],
+            ["Duplicate Rows Count", f"{metrics.get('duplicate_count', 0)} ({metrics.get('duplicate_pct', 0.0):.1f}%)"],
+            ["Outliers Percentage", f"{metrics.get('outlier_pct', 0.0):.1f}% ({metrics.get('outlier_count', 0)} values)"],
+            ["Memory Usage", f"{metrics.get('memory_usage_mb', 0.0):.2f} MB"]
+        ]
+        health_table = Table(health_data, colWidths=[2.5*inch, 2.5*inch])
+        health_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), primary_color),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+            ('BOTTOMPADDING', (0,0), (-1,0), 6),
+            ('BACKGROUND', (0,1), (-1,-1), bg_light),
+            ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#BDC3C7")),
+            ('BOX', (0,0), (-1,-1), 1, primary_color),
+            ('PADDING', (0,0), (-1,-1), 6),
+        ]))
+        story.append(health_table)
+        story.append(Spacer(1, 15))
+        
+        # --- SECTION 2: CLEANING AND PREPROCESSING LOGS ---
+        story.append(Paragraph("2. Cleaning Operations Log", styles['Heading1']))
+        if cleaning_logs:
+            story.append(Paragraph("The following cleaning steps were applied to the raw dataset:", body_style))
+            for log in cleaning_logs:
+                story.append(Paragraph(f"• {log}", code_style))
+        else:
+            story.append(Paragraph("No cleaning operations were performed. The dataset was analyzed in its raw form.", body_style))
+        story.append(Spacer(1, 15))
+        
+        # --- SECTION 3: BIAS & FAIRNESS ---
+        story.append(Paragraph("3. Bias & Fairness Analysis", styles['Heading1']))
+        if bias_summary and "error" not in bias_summary:
+            sens_col = bias_summary.get("sensitive_column")
+            priv_group = bias_summary.get("privileged_group")
+            hist = bias_summary.get("historical_metrics", {})
+            di_ratio = hist.get("disparate_impact", 1.0)
+            bias_status = "BIASED" if hist.get("is_biased", False) else "FAIR"
+            
+            story.append(Paragraph(f"Evaluated sensitive dimension: <b>'{sens_col}'</b> (Privileged: '{priv_group}')", body_style))
+            story.append(Paragraph(f"Disparate Impact Ratio: <b>{di_ratio:.2f}</b> (Status: <b>{bias_status}</b>)", body_style))
+            story.append(Paragraph(f"<b>Statistical Explanation:</b> {bias_summary.get('explanation')}", body_style))
+        else:
+            story.append(Paragraph("No sensitive columns were identified or selected for fairness analysis.", body_style))
+        story.append(PageBreak())
+        
+        # --- SECTION 4: MODEL RECOMMENDATIONS & PERFORMANCE ---
+        story.append(Paragraph("4. Model Performance Comparison", styles['Heading1']))
+        
+        if model_comparison_list:
+            model_headers = ["Algorithm", "Training Time", "Inference Time"]
+            # Detect classification metrics vs regression
+            sample_model = model_comparison_list[0]
+            metric_keys = list(sample_model.get("metrics", {}).keys())
+            
+            for k in metric_keys:
+                model_headers.append(k.upper())
+                
+            model_table_data = [model_headers]
+            for row in model_comparison_list:
+                table_row = [
+                    row.get("model_name", ""),
+                    f"{row.get('training_time_s', 0.0):.3f}s",
+                    f"{row.get('prediction_time_s', 0.0):.3f}s"
+                ]
+                for k in metric_keys:
+                    val = row.get("metrics", {}).get(k, 0.0)
+                    table_row.append(f"{val:.4f}")
+                model_table_data.append(table_row)
+                
+            model_table = Table(model_table_data)
+            model_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), secondary_color),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0,0), (-1,-1), 8),
+                ('BOTTOMPADDING', (0,0), (-1,0), 6),
+                ('BACKGROUND', (0,1), (-1,-1), bg_light),
+                ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#BDC3C7")),
+                ('BOX', (0,0), (-1,-1), 1, secondary_color),
+                ('PADDING', (0,0), (-1,-1), 6),
+            ]))
+            story.append(model_table)
+        else:
+            story.append(Paragraph("No trained models were recorded for comparison.", body_style))
+        story.append(Spacer(1, 15))
+        
+        # --- SECTION 5: EXECUTIVE BUSINESS INSIGHTS ---
+        story.append(Paragraph("5. AI Business Insights & Strategy", styles['Heading1']))
+        
+        # Format markdown breaks to paragraphs
+        import re
+        import html
+        insights_paras = business_insights.split("\n\n")
+        for para in insights_paras:
+            para_text = para.strip().replace("🔹 ", "• ")
+            if para_text:
+                # Escape XML special characters to avoid SAX parsing crashes in ReportLab
+                para_text = html.escape(para_text)
+                # Replace markdown bold **text** with <b>text</b>
+                para_text = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", para_text)
+                
+                if para_text.startswith("### "):
+                    # Remove the escaped hash marks if they were escaped
+                    title_text = para_text.replace("### ", "").replace("###", "")
+                    story.append(Paragraph(title_text, h2_style))
+                else:
+                    story.append(Paragraph(para_text, body_style))
+                    
+        # Build document
+        doc.build(cast(list[Flowable], story))
+        return output_path
+        
+    except Exception as e:
+        return f"PDF generation error: {str(e)}"

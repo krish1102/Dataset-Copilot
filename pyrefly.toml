@@ -1,0 +1,3 @@
+# Pyrefly Configuration File
+project-includes = ["src"]
+search-path = ["."]
